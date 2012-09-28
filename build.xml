@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="SmartHelloWorld" default="default" basedir="." xmlns:j2seproject3="http://www.netbeans.org/ns/j2se-project/3">
+    <description>Builds, tests, and runs the project SmartHelloWorld.</description>
+	<import file="nbproject/build-impl.xml"/>
+    <target name="-post-init">
+		<path id="jc-tasks" >
+			<pathelement path="lib//jctasks.jar"/>
+		</path>	
+		<taskdef name="apdutool"  
+			classname="com.sun.javacard.ant.tasks.APDUToolTask"
+			classpathref="jc-tasks" /> 
+		<taskdef name="capgen"  
+			classname="com.sun.javacard.ant.tasks.CapgenTask"
+			classpathref="jc-tasks" /> 
+		<taskdef name="convert" 
+			classname="com.sun.javacard.ant.tasks.ConverterTask"
+			classpathref="jc-tasks" />
+		<taskdef name="verifyexport" 
+			classname="com.sun.javacard.ant.tasks.VerifyExpTask"
+			classpathref="jc-tasks" />
+		<taskdef name="verifycap" 
+			classname="com.sun.javacard.ant.tasks.VerifyCapTask"
+			classpathref="jc-tasks" />
+		<taskdef name="verifyrevision" 
+			classname="com.sun.javacard.ant.tasks.VerifyRevTask"
+			classpathref="jc-tasks" />
+		<taskdef name="scriptgen" 
+			classname="com.sun.javacard.ant.tasks.ScriptgenTask"
+			classpathref="jc-tasks" />
+		
+		<path id="jc-classpath" >
+			<pathelement path="${jc.home}/lib/converter.jar"/>
+			<pathelement path="${jc.home}/lib/offcardverifier.jar"/>
+			<pathelement path="${jc.home}/lib/scriptgen.jar"/>
+			<pathelement path="${jc.home}/lib/apdutool.jar"/>
+			<pathelement path="${jc.home}/lib/apduio.jar"/>
+			
+			<pathelement path="lib//comm.jar"/>
+			
+			<pathelement path="."/>
+		</path>
+	</target>
+	
+	<target name="convert" depends="init">
+		<copy todir="${build.classes.dir}">
+			<fileset dir="${jc.export_files}">
+				<filename name="**/*.exp"/>
+			</fileset>
+		</copy>
+		
+		<convert
+			dir="${build.classes.dir}"
+			Configfile="${src.dir}/com/sun/javacard/samples/HelloWorld/HelloWorld.opt"
+			nobanner="true">
+			<classpath refid="jc-classpath"/>
+		</convert>
+		<verifycap Verbose="true" CapFile="${build.classes.dir}/com/sun/javacard/samples/HelloWorld/javacard/HelloWorld.cap">
+			<exportfiles file="${jc.export_files}/java/lang/javacard/lang.exp" />
+			<exportfiles file="${jc.export_files}/javacard/framework/javacard/framework.exp" />
+			<exportfiles file="${jc.export_files}/javacard/security/javacard/security.exp" />
+			<exportfiles file="${jc.export_files}/javacardx/crypto/javacard/crypto.exp" />
+			<exportfiles file="${build.classes.dir}/com/sun/javacard/samples/HelloWorld/javacard/HelloWorld.exp" />
+			<classpath refid="jc-classpath"/>
+		</verifycap>
+		
+	</target>
+	
+	<target name="jar" depends="init,compile,convert">
+	</target>
+
+	<target name="run-script" depends="init">
+		<exec executable="${gpshell.cmd}">
+			<arg value="${basedir}/scripts/helloInstallGP211_JCOP41_cap.txt"/>
+		</exec>
+	</target>
+	<target name="test" depends="jar,run-script">
+	</target>
+</project>
