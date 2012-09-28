@@ -19,7 +19,7 @@ import javacard.framework.*;
  */
 public class HelloWorld extends Applet {
 
-    private final static byte MY_SIGNATURE = 9;
+    private final static byte MY_SIGNATURE = 1;
     private byte[] echoBytes;
     private static final short LENGTH_ECHO_BYTES = 256;
     private final static byte INS_INIT = 0x01;
@@ -35,6 +35,7 @@ public class HelloWorld extends Applet {
      */
     protected HelloWorld() {
         echoBytes = new byte[LENGTH_ECHO_BYTES];
+        msisdn = new byte[1];
         register();
     }
 
@@ -58,11 +59,19 @@ public class HelloWorld extends Applet {
         if (selectingApplet()) {
             return;
         }
+        
         byte[] buf = apdu.getBuffer();
+        short bytesRead = apdu.setIncomingAndReceive();
+        short echoOffset = (short) 0;
+        while (bytesRead > 0) {
+            Util.arrayCopyNonAtomic(buf, ISO7816.OFFSET_CDATA, echoBytes, echoOffset, bytesRead);
+            echoOffset += bytesRead;
+            bytesRead = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+        }
+                
         switch (buf[ISO7816.OFFSET_INS]) {
             case INS_MSISDN:
                 // create a byte array out of the value (length: 1)
-                msisdn = new byte[1];
                 msisdn[0] = MY_SIGNATURE;
 
                 apdu.setOutgoing();
@@ -78,15 +87,6 @@ public class HelloWorld extends Applet {
                 break;
 
             case INS_ECHO:
-                short bytesRead = apdu.setIncomingAndReceive();
-                short echoOffset = (short) 0;
-
-                while (bytesRead > 0) {
-                    Util.arrayCopyNonAtomic(buf, ISO7816.OFFSET_CDATA, echoBytes, echoOffset, bytesRead);
-                    echoOffset += bytesRead;
-                    bytesRead = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
-                }
-
                 apdu.setOutgoing();
                 apdu.setOutgoingLength((short) (echoOffset + 5));
 
