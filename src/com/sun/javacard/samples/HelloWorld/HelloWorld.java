@@ -19,17 +19,19 @@ import javacard.framework.*;
  */
 public class HelloWorld extends Applet {
 
-    private final static byte MY_SIGNATURE = 5;
+    private final static byte MY_SIGNATURE = 1;
     private byte[] echoBytes;
     private static final short LENGTH_ECHO_BYTES = 256;
     private final static byte INS_INIT = 0x01;
     private final static byte INS_SIGN = 0x02;
     private final static byte INS_MSISDN = 0x04;
     private final static byte INS_ECHO = 0x08;
+    private final static byte INS_CODE = 0x10;
     private byte[] msisdn;
     private byte[] opres;
     private byte[] key;
     private boolean initialized = false;
+    private byte myCode = MY_SIGNATURE;
 
     /**
      * Only this class's install method should create the applet object.
@@ -87,7 +89,7 @@ public class HelloWorld extends Applet {
         switch (buf[ISO7816.OFFSET_INS]) {
             case INS_MSISDN:
                 // create a byte array out of the value (length: 1)
-                msisdn[0] = MY_SIGNATURE;
+                msisdn[0] = myCode;
 
                 apdu.setOutgoing();
                 apdu.setOutgoingLength((byte) msisdn.length);
@@ -95,8 +97,17 @@ public class HelloWorld extends Applet {
                         //(byte) msisdn.length); // length
                         (byte) 1); // length
                 break;
-            case INS_INIT:
-                //cmdInit(apdu);
+            case INS_CODE:
+                myCode=buf[ISO7816.OFFSET_CDATA];
+                
+                // create a byte array out of the value (length: 1)
+                msisdn[0] = myCode;
+
+                apdu.setOutgoing();
+                apdu.setOutgoingLength((byte) msisdn.length);
+                apdu.sendBytesLong(msisdn, (short) 0, // offset
+                        //(byte) msisdn.length); // length
+                        (byte) 1); // length
                 break;
             case INS_SIGN:
                 // perform operation on two bytes received
