@@ -15,8 +15,16 @@
  */
 package com.example.android.nfc;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.Locale;
+import java.util.Random;
+
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Application;
+import android.app.Dialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.nfc.NdefMessage;
@@ -25,21 +33,23 @@ import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.IsoDep;
 import android.nfc.tech.Ndef;
-import android.nfc.tech.NfcA;
+import android.nfc.tech.NdefFormatable;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.WindowManager;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.example.android.nfc.record.ParsedNdefRecord;
 import com.example.android.nfc.simulator.FakeTagsActivity;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Random;
+import com.google.common.base.Charsets;
+import com.google.common.primitives.Bytes;
 
 /**
  * An {@link Activity} which handles a broadcast of a new tag that the device
@@ -48,6 +58,9 @@ import java.util.Random;
 public class TagViewer extends Activity {
 
     static final String TAG = "ViewTag";
+    
+    static byte newCode = 0;
+    static boolean setNewCode=false;
 
     /**
      * This activity will finish itself in this amount of time if the user
@@ -75,8 +88,8 @@ public class TagViewer extends Activity {
     int iter = 0;
     TextView mTitle;
     TextView mCode;
-
     LinearLayout mTagContent;
+    Tag curTag;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -154,6 +167,30 @@ public class TagViewer extends Activity {
 		short resultShort = readShort(result, (short)0);
     	return resultShort;
     }
+    
+    public void doSetCode(IsoDep isodep, byte code) throws IOException{
+    	byte[] DO_SL = {
+    		(byte) 0x80, // CLA Class
+    		(byte) 0x10, // INS Instruction
+    		(byte) 0x00, // P1 Parameter 1
+    		(byte) 0x00, // P2 Parameter 2
+    		(byte) 0x02, // byte
+    		(byte) 0x10, 0x00, 0x10
+    	};
+    	
+    	DO_SL[5] = code;
+    	
+    	// select 
+    	byte[] result;
+    	int len;
+		
+		result = isodep.transceive(DO_SL);
+		len = result.length;
+		Log.e(TAG, "PreSetCode: Bytes: " + this.dumpByteArray(DO_SL));
+		Log.e(TAG, "DO SetCode: Result: " + len + "; Bytes: " + this.dumpByteArray(result));
+		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
+			throw new IOException("could not retrieve result of operation");
+    }
 
     void resolveIntent(Intent intent) {
     	
@@ -187,6 +224,8 @@ public class TagViewer extends Activity {
              
             try{
             	Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+            	this.curTag = tag;
+            	
             	if (tag==null){
             		Log.e(TAG, "Tag is null!");
             	}
@@ -195,6 +234,9 @@ public class TagViewer extends Activity {
             	for(int i=0; i<techs.length; i++){
             		Log.e(TAG, "Tech: " + techs[i]);
             	}
+            	
+            	// write message
+        		this.setNFCMessage("Last: " + this.number);
             	
             	IsoDep isodep = IsoDep.get(tag);
             	if (isodep!=null){
@@ -205,7 +247,7 @@ public class TagViewer extends Activity {
             		// select
                 	this.doSelect(isodep);
                 	
-                	// do operation:
+                	// do operation on card
                 	Random r  = new Random();
                 	short n1  = (short) (r.nextInt(20)-10);
                 	short n2  = (short) (r.nextInt(20)-10);
@@ -215,6 +257,20 @@ public class TagViewer extends Activity {
                 		Log.e(TAG, "Result of op. "+n1+" . "+n2+" = "+res);
                 	} catch (Exception exc){
                 		Log.e(TAG, "Cannot perform operation", exc);
+                	}
+                	
+                	if (TagViewer.setNewCode){
+                		try {
+                			this.doSetCode(isodep, TagViewer.newCode);
+                			TagViewer.setNewCode = false;
+            				Toast toast = Toast.makeText(this.getApplicationContext(), "Code was set to: " + TagViewer.newCode, Toast.LENGTH_SHORT);
+            				toast.show();
+            			}
+                		catch(Exception e){
+                    		Log.e(TAG, "Cannot set code", e);
+                    		Toast toast = Toast.makeText(this.getApplicationContext(), "Problem with setting code!", Toast.LENGTH_SHORT);
+                    		toast.show();
+                		}
                 	}
                 	
                 	// get identification with APDU
@@ -251,10 +307,11 @@ public class TagViewer extends Activity {
                         this.iter+=1;
                         mCode = (TextView) findViewById(R.id.code);
                         mCode.setText("Code: " + code + "\nNum: " + this.number + " ; Iter: " + this.iter + "\n"
-                        		+ n1 + "." + n2 + "=" + res);
+                        		+ n1 + " op " + n2 + " = " + res);
                         mCode.setTextSize(40);
                         mCode.setBackgroundColor(code==1 ? Color.BLUE : Color.GREEN);
-                              
+                        
+                        
                         FakeTagsActivity.number = this.number;
                         FakeTagsActivity.iter = this.iter;
                         if (parent!=null){
@@ -296,12 +353,8 @@ public class TagViewer extends Activity {
       // Save UI state changes to the savedInstanceState.
       // This bundle will be passed to onCreate if the process is
       // killed and restarted.
-      //savedInstanceState.putBoolean("MyBoolean", true);
-      //savedInstanceState.putDouble("myDouble", 1.9);
       savedInstanceState.putInt("number", this.number);
       savedInstanceState.putInt("iter", this.iter);
-      //savedInstanceState.putString("MyString", "Welcome back to Android");
-      // etc.
     }
     
     @Override
@@ -309,16 +362,12 @@ public class TagViewer extends Activity {
       super.onRestoreInstanceState(savedInstanceState);
       // Restore UI state from the savedInstanceState.
       // This bundle has also been passed to onCreate.
-      //boolean myBoolean = savedInstanceState.getBoolean("MyBoolean");
-      //double myDouble = savedInstanceState.getDouble("myDouble");
-      //int myInt = savedInstanceState.getInt("MyInt");
       if (savedInstanceState!=null){
 	      if (savedInstanceState.containsKey("number"))
 	      	this.number = savedInstanceState.getInt("number");
 	      if (savedInstanceState.containsKey("iter"))
 	      	this.iter = savedInstanceState.getInt("iter");
       }
-      //String myString = savedInstanceState.getString("MyString");
     }
     
     public String dumpByteArray(byte[] b){
@@ -354,8 +403,176 @@ public class TagViewer extends Activity {
             inflater.inflate(R.layout.tag_divider, content, true);
         }
     }
-
+    
     @Override
+	protected Dialog onCreateDialog(int id) {
+		return super.onCreateDialog(id);
+	}
+    
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.tagmenu, menu);
+        return true;
+    }
+    
+    public boolean onOptionsItemSelected(MenuItem item) {
+		// respond to menu item selection
+		switch (item.getItemId()) {
+		case R.id.setMsg:
+			this.showAlert();
+			return true;
+		case R.id.delMsg:
+			Log.e(TAG, "Delete message selected");
+			return true;
+		case R.id.setCode:
+			Log.e(TAG, "Setting code");
+			this.showSetCodeAlert();
+		default:
+			return super.onOptionsItemSelected(item);
+		}
+    }
+    
+    public void showSetCodeAlert(){
+    	AlertDialog.Builder alert = new AlertDialog.Builder(this);
+		alert.setTitle("Code change");
+		alert.setMessage("Enter code:");
+		
+		// Set an EditText view to get user input
+		final EditText input = new EditText(this);
+		alert.setView(input);
+
+		alert.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				String value = input.getText().toString();
+				Log.e(TAG, "New code: " + value);
+				setCode(value);
+				return;
+			}
+		});
+
+		alert.setNegativeButton("Cancel",
+				new DialogInterface.OnClickListener() {
+					public void onClick(DialogInterface dialog, int which) {
+						return;
+					}
+				});
+		
+		alert.show();
+    }
+    
+	public void showAlert() {
+		AlertDialog.Builder alert = new AlertDialog.Builder(this);
+		alert.setTitle("Enter message");
+		alert.setMessage("Enter message:");
+		final StringBuilder message = new StringBuilder();
+		
+		// Set an EditText view to get user input
+		final EditText input = new EditText(this);
+		alert.setView(input);
+
+		alert.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int whichButton) {
+				String value = input.getText().toString();
+				message.append(value);
+				Log.e(TAG, "Pin Value : " + value);
+				setNFCMessage(value);
+				return;
+			}
+		});
+
+		alert.setNegativeButton("Cancel",
+				new DialogInterface.OnClickListener() {
+					public void onClick(DialogInterface dialog, int which) {
+						return;
+					}
+				});
+		
+		alert.show();
+		
+	}
+
+	public void setCode(String code){
+		try {
+			byte myCode = Byte.parseByte(code);
+			TagViewer.setNewCode=true;
+			TagViewer.newCode = myCode;
+			
+			Toast toast = Toast.makeText(this.getApplicationContext(), "Code will be set to: " + myCode, Toast.LENGTH_SHORT);
+			toast.show();
+    	} catch(Exception e){
+    		Log.e(TAG, "Cannot set code", e);
+    		Toast toast = Toast.makeText(this.getApplicationContext(), "Problem with setting code!", Toast.LENGTH_SHORT);
+    		toast.show();
+    	}
+	}
+	
+	public boolean setNFCMessage(String message) {
+		try {
+			// record to launch Play Store if app is not installed
+			//NdefRecord appRecord1 = FakeTagsActivity.newTextRecord(message, Locale.getDefault(), true);
+			NdefRecord appRecord1 = new NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, new byte[0], message.getBytes());
+			//NdefMessage ndefmsg = new NdefMessage(new NdefRecord[] {appRecord1});
+			
+			Locale locale = Locale.US;
+	        final byte[] langBytes = locale.getLanguage().getBytes(Charsets.US_ASCII);
+	        String text = "Tag, you're it!";
+	        final byte[] textBytes = text.getBytes(Charsets.UTF_8);
+	        final int utfBit = 0;
+	        final char status = (char) (utfBit + langBytes.length);
+	        final byte[] data = Bytes.concat(new byte[] {(byte) status}, langBytes, textBytes);
+	        NdefRecord record = new NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, new byte[0], data);
+			
+			NdefRecord[] records = {record};
+			NdefMessage ndefmsg = new NdefMessage(records);
+			
+			// see if tag is already NDEF formatted
+			Ndef ndef = Ndef.get(this.curTag);
+			if (ndef != null) {
+				ndef.connect();
+				if (!ndef.isWritable()) {
+					Log.e(TAG, "Read-only tag.");
+					return false;
+				}
+				
+				// work out how much space we need for the data
+				ndef.writeNdefMessage(ndefmsg);
+				ndef.close();
+				Log.e(TAG, "Tag written successfully.");
+				return true;
+			} else {
+				// attempt to format tag
+				NdefFormatable format = NdefFormatable.get(this.curTag);
+				if (format != null) {
+					try {
+						format.connect();
+						Log.e(TAG, "Connected: " + (format.isConnected() ? "YES":"NO"));
+						
+						//int serviceHandle = format.getServiceHandle();
+						//INfcTag tagService = format.getTagService();
+						//int errorCode = tagService.formatNdef(serviceHandle, MifareClassic.KEY_DEFAULT);
+						
+						format.formatReadOnly(ndefmsg);
+						Log.e(TAG, "Tag written successfully!");
+						return true;
+					} catch (IOException e) {
+						Log.e(TAG, "Unable to format tag to NDEF. Msg: " + e.getMessage(), e);
+						return false;
+					} finally {
+						format.close();
+					}
+				} else {
+					Log.e(TAG, "Tag doesn't appear to support NDEF format.");
+					return false;
+				}
+			}
+		} catch (Exception e) {
+			Log.e(TAG, "Failed to write tag", e);
+		}
+			
+		return false;
+	}
+
+	@Override
     public void onNewIntent(Intent intent) {
         setIntent(intent);
         resolveIntent(intent);
