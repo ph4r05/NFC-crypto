@@ -19,7 +19,7 @@ import javacard.framework.*;
  */
 public class HelloWorld extends Applet {
 
-    private final static byte MY_SIGNATURE = 1;
+    private final static byte MY_SIGNATURE = 5;
     private byte[] echoBytes;
     private static final short LENGTH_ECHO_BYTES = 256;
     private final static byte INS_INIT = 0x01;
@@ -27,6 +27,7 @@ public class HelloWorld extends Applet {
     private final static byte INS_MSISDN = 0x04;
     private final static byte INS_ECHO = 0x08;
     private byte[] msisdn;
+    private byte[] opres;
     private byte[] key;
     private boolean initialized = false;
 
@@ -35,7 +36,8 @@ public class HelloWorld extends Applet {
      */
     protected HelloWorld() {
         echoBytes = new byte[LENGTH_ECHO_BYTES];
-        msisdn = new byte[1];
+        msisdn = new byte[16];
+        opres = new byte[4];
         register();
     }
 
@@ -49,6 +51,19 @@ public class HelloWorld extends Applet {
         new HelloWorld();
     }
 
+    public static short readShort(byte[] data, short offset) {
+	return (short) (((data[(short)(offset)] << 8)) | ((data[(short)(offset + 1)] & 0xff)));
+    }
+
+    public static byte[] shortToByteArray(short s) {
+	return new byte[] { (byte) ((s & (short)0xFF00) >> 8), (byte) (s & (short)0x00FF) };
+    }
+    
+    public static void shortToExistingByteArray(short s, byte[] buff, short offset) {
+    	buff[(short)(offset)]   = (byte)((s & (short)0xFF00) >> 8);
+    	buff[(short)(offset+1)] =  (byte) (s & (short)0x00FF);
+    }
+    
     /**
      * Processes an incoming APDU.
      * @see APDU
@@ -77,13 +92,24 @@ public class HelloWorld extends Applet {
                 apdu.setOutgoing();
                 apdu.setOutgoingLength((byte) msisdn.length);
                 apdu.sendBytesLong(msisdn, (short) 0, // offset
-                        (byte) msisdn.length); // length
+                        //(byte) msisdn.length); // length
+                        (byte) 1); // length
                 break;
             case INS_INIT:
                 //cmdInit(apdu);
                 break;
             case INS_SIGN:
-                //cmdSign(apdu);
+                // perform operation on two bytes received
+                if (echoOffset>=4){
+                    short num1 = readShort(buf, (short)(ISO7816.OFFSET_CDATA));
+                    short num2 = readShort(buf, (short)(ISO7816.OFFSET_CDATA+2));
+                    short res  = (short) (MY_SIGNATURE == 1 ? num1*num2 : num1+num2);
+                    shortToExistingByteArray(res, opres, (short)0);
+                    
+                    apdu.setOutgoing();
+                    apdu.setOutgoingLength((short) (2));
+                    apdu.sendBytesLong(opres, (short) 0, (short) 2);
+                }
                 break;
 
             case INS_ECHO:
