@@ -12,7 +12,7 @@ delete -AID a00000006203010c01
 //install -file /home/ph4r05/workspace/NFCHelloWorld/build/classes/com/sun/javacard/samples/HelloWorld/javacard/HelloWorld.cap -sdAID A000000018434D00 -nvCodeLimit 4000
 install -file /home/ph4r05/workspace/NFCHelloWorld/build/classes/com/sun/javacard/samples/HelloWorld/javacard/HelloWorld.cap -nvCodeLimit 4000  -instParam 00 -priv 2
 //install -file ${build.classes.dir}/${jc.package.path}/javacard/${jc.package.shortName}.cap -nvDataLimit 2000 -instParam 00 -priv 2
-//select -AID a00000006203010c01
+select -AID a00000006203010c01
 //send_apdu -APDU B040000009010203040506070809
 
 card_disconnect
