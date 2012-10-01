@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
+import utils.CardOperations;
+
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Application;
@@ -72,14 +74,6 @@ public class TagViewer extends Activity {
      * doesn't do anything.
      */
     static final int ACTIVITY_TIMEOUT_MS = 1 * 1000;
-
-    public static byte[] SELECT = { (byte) 0x00, // CLA Class 
-    		(byte) 0xA4, // INS Instruction 
-    		(byte) 0x04, // P1 Parameter 1 
-    		(byte) 0x00, // P2 Parameter 2 
-    		(byte) 0x09, // Length
-    		(byte) 0xa0, 0x00, 0x00, 0x00, 0x62, 0x03, 0x01, 0x0c, 0x01 
-    		};
     
     int number = 0;
     int iter = 0;
@@ -108,146 +102,8 @@ public class TagViewer extends Activity {
         
         resolveIntent(getIntent());
     }
-    
-    public static short readShort(byte[] data, short offset) {
-    	return (short) (((data[offset] << 8)) | ((data[offset + 1] & 0xff)));
-    }
-
-    public static byte[] shortToByteArray(short s) {
-    	return new byte[] { (byte) ((s & 0xFF00) >> 8), (byte) (s & 0x00FF) };
-    }
-    
-    public static void shortToExistingByteArray(short s, byte[] buff, short offset) {
-    	buff[offset]   = (byte)((s & 0xFF00) >> 8);
-    	buff[offset+1] =  (byte) (s & 0x00FF);
-    }
-    
-    public boolean doSelect(IsoDep isodep) throws IOException{
-    	// select 
-    	byte[] result;
-    	int len;
-    	
-    	result = isodep.transceive(SELECT);
-		len = result.length;
-		Log.e(TAG, "Select, Result: " + len + "; Bytes: " + this.dumpByteArray(result));
-		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
-			throw new IOException("could not select");
-		return true;
-    }
-    
-    public short doOperation(IsoDep isodep, short num1, short num2) throws IOException{
-    	byte[] DO_OP = {
-    		(byte) 0x80, // CLA Class
-    		(byte) 0x02, // INS Instruction
-    		(byte) 0x00, // P1 Parameter 1
-    		(byte) 0x00, // P2 Parameter 2
-    		(byte) 0x04, // 2 short numbers
-    		(byte) 0x00, 0x00, 0x00, 0x00,
-    		(byte) 0x10 // LE maximal number of bytes expected in result
-    	};
-    	
-    	shortToExistingByteArray(num1, DO_OP, (short)5);
-    	shortToExistingByteArray(num2, DO_OP, (short)7);
-    	
-    	// select 
-    	byte[] result;
-    	int len;
-		
-		result = isodep.transceive(DO_OP);
-		len = result.length;
-		Log.e(TAG, "PreOP Op: Bytes: " + this.dumpByteArray(DO_OP));
-		Log.e(TAG, "DO Op: Result: " + len + "; Bytes: " + this.dumpByteArray(result));
-		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
-			throw new IOException("could not retrieve result of operation");
-		
-		// convert result to short
-		short resultShort = readShort(result, (short)0);
-    	return resultShort;
-    }
-    
-    public void doSetCode(IsoDep isodep, byte code) throws IOException{
-    	byte[] DO_SL = {
-    		(byte) 0x80, // CLA Class
-    		(byte) 0x10, // INS Instruction
-    		(byte) 0x00, // P1 Parameter 1
-    		(byte) 0x00, // P2 Parameter 2
-    		(byte) 0x02, // byte
-    		(byte) 0x10, 0x00, 0x10
-    	};
-    	
-    	DO_SL[5] = code;
-    	
-    	// select 
-    	byte[] result;
-    	int len;
-		
-		result = isodep.transceive(DO_SL);
-		len = result.length;
-		Log.e(TAG, "PreSetCode: Bytes: " + this.dumpByteArray(DO_SL));
-		Log.e(TAG, "DO SetCode: Result: " + len + "; Bytes: " + this.dumpByteArray(result));
-		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
-			throw new IOException("could not retrieve result of operation");
-    }
-    
-    public byte doCodeReq(IsoDep isodep) throws IOException{
-    	byte[] GET_MSISDN = {
-    		(byte) 0x80, // CLA Class
-    		(byte) 0x04, // INS Instruction
-    		(byte) 0x00, // P1 Parameter 1
-    		(byte) 0x00, // P2 Parameter 2
-    		(byte) 0x10 // LE maximal number of bytes expected in result
-    	};
-    	
-    	byte[] result = isodep.transceive(GET_MSISDN);
-		int len = result.length;
-		Log.e(TAG, "Result: " + len + "; Bytes: " + this.dumpByteArray(result));
-		
-		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
-			throw new IOException("could not retrieve msisdn");
-		
-		byte[] data = new byte[len-2];
-		System.arraycopy(result, 0, data, 0, len-2);
-		if (data!=null && data.length>0){
-			byte code = data[0];
-			Log.e(TAG, "Code: " + code);
-			return code;
-		}
-		
-		throw new IOException("Answer expected");
-    }
-    
-    private NdefRecord createRecord(String text) throws UnsupportedEncodingException {
-        String lang       = "en";
-        byte[] textBytes  = text.getBytes();
-        byte[] langBytes  = lang.getBytes("US-ASCII");
-        int    langLength = langBytes.length;
-        int    textLength = textBytes.length;
-        byte[] payload    = new byte[1 + langLength + textLength];
-
-        // set status byte (see NDEF spec for actual bits)
-        payload[0] = (byte) langLength;
-
-        // copy langbytes and textbytes into payload
-        System.arraycopy(langBytes, 0, payload, 1,              langLength);
-        System.arraycopy(textBytes, 0, payload, 1 + langLength, textLength);
-
-        NdefRecord record = new NdefRecord(NdefRecord.TNF_WELL_KNOWN, 
-                                           NdefRecord.RTD_TEXT, 
-                                           new byte[0], 
-                                           payload);
-
-        return record;
-    }
-    
-    public static NdefMessage createNdefMsg(String msg) {
-        byte[] textBytes = msg.getBytes();
-        NdefRecord textRecord = new NdefRecord(NdefRecord.TNF_MIME_MEDIA,
-            "application/vnd.facebook.places".getBytes(), new byte[] {}, textBytes);
-        return new NdefMessage(new NdefRecord[] { textRecord });
-    }
 
     void resolveIntent(Intent intent) {
-    	
         // Parse the intent
         String action = intent.getAction();
         if (NfcAdapter.ACTION_TAG_DISCOVERED.equals(action)) {
@@ -310,7 +166,7 @@ public class TagViewer extends Activity {
             		int len = 0;
             		
             		// select
-                	this.doSelect(isodep);
+                	CardOperations.doSelect(isodep);
                 	
                 	// do operation on card
                 	Random r  = new Random();
@@ -318,7 +174,7 @@ public class TagViewer extends Activity {
                 	short n2  = (short) (r.nextInt(20)-10);
                 	short res = 0;
                 	try {
-                		res = this.doOperation(isodep, n1, n2);
+                		res = CardOperations.doOperation(isodep, n1, n2);
                 		Log.e(TAG, "Result of op. "+n1+" . "+n2+" = "+res);
                 	} catch (Exception exc){
                 		Log.e(TAG, "Cannot perform operation", exc);
@@ -327,7 +183,7 @@ public class TagViewer extends Activity {
                 	// set new code
                 	if (TagViewer.setNewCode){
                 		try {
-                			this.doSetCode(isodep, TagViewer.newCode);
+                			CardOperations.doSetCode(isodep, TagViewer.newCode);
                 			TagViewer.setNewCode = false;
             				Toast toast = Toast.makeText(this.getApplicationContext(), "Code was set to: " + TagViewer.newCode, Toast.LENGTH_SHORT);
             				toast.show();
@@ -340,7 +196,7 @@ public class TagViewer extends Activity {
                 	}
                 	
                 	// get identification with APDU
-                	byte code = this.doCodeReq(isodep);
+                	byte code = CardOperations.doCodeReq(isodep);
         			Log.e(TAG, "Code: " + code);
                     
                     //FakeTagsActivity.newTextRecord("Code: " + code, , encodeInUtf8)
@@ -408,20 +264,6 @@ public class TagViewer extends Activity {
       }
     }
     
-    public String dumpByteArray(byte[] b){
-        return this.dumpByteArray(b, 0, b.length);
-    }
-    
-    public String dumpByteArray(byte[] b, int offset, int size){
-    	StringBuilder sb = new StringBuilder();
-        for(int i=offset; i<(offset+size); i++){
-            if (((i-offset) % 16) == 0) sb.append("| ");
-            sb.append(String.format("%02X", b[i]) + " ");
-        } 
-        sb.append("\n");
-        return sb.toString();
-    }
-
     void buildTagViews(NdefMessage[] msgs) {
         if (msgs == null || msgs.length == 0) {
             return;
@@ -548,7 +390,7 @@ public class TagViewer extends Activity {
 		try {
 			//NdefRecord[] records = { this.createRecord(message) };
 		    //NdefMessage  ndefmsg = new NdefMessage(records);
-			NdefMessage  ndefmsg = createNdefMsg(message);
+			NdefMessage  ndefmsg = CardOperations.createNdefMsg(message);
 			
 			// see if tag is already NDEF formatted
 			Ndef ndef = Ndef.get(this.curTag);
