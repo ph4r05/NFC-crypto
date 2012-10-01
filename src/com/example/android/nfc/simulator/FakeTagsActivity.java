@@ -25,6 +25,7 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
+import com.example.android.nfc.TagViewer;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Bytes;
@@ -107,6 +108,7 @@ public class FakeTagsActivity extends ListActivity {
         final TagDescription description = mAdapter.getItem(position);
         final Intent intent = new Intent(NfcAdapter.ACTION_TAG_DISCOVERED);
         intent.putExtra(NfcAdapter.EXTRA_NDEF_MESSAGES, description.msgs);
+        intent.setClass(this.getApplicationContext(), TagViewer.class);
         startActivity(intent);
     }
 

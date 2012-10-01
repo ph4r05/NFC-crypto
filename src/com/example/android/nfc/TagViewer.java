@@ -16,19 +16,18 @@
 package com.example.android.nfc;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.List;
-import java.util.Locale;
 import java.util.Random;
 
 import utils.CardOperations;
-
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Application;
 import android.app.Dialog;
+import android.app.PendingIntent;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
@@ -52,8 +51,6 @@ import android.widget.Toast;
 
 import com.example.android.nfc.record.ParsedNdefRecord;
 import com.example.android.nfc.simulator.FakeTagsActivity;
-import com.google.common.base.Charsets;
-import com.google.common.primitives.Bytes;
 
 /**
  * An {@link Activity} which handles a broadcast of a new tag that the device
@@ -82,16 +79,21 @@ public class TagViewer extends Activity {
     LinearLayout mTagContent;
     Tag curTag;
 
+	private NfcAdapter mAdapter;
+	private PendingIntent mPendingIntent;
+	private IntentFilter[] mFilters;
+	private String[][] mTechLists;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
         Log.e(TAG, "TagViewer Activity created");
-
         setContentView(R.layout.tag_viewer);
         mTagContent = (LinearLayout) findViewById(R.id.list);
         mTitle = (TextView) findViewById(R.id.title);
         
+        // recover state from bundle
         if (savedInstanceState!=null){
         	Log.e(TAG, "Have some saved instance!");
 	        if (savedInstanceState.containsKey("number"))
@@ -100,6 +102,17 @@ public class TagViewer extends Activity {
 	        	this.iter = savedInstanceState.getInt("iter");
         }
         
+        // steal NFC intents 
+        mAdapter = NfcAdapter.getDefaultAdapter(this);
+        // declare 
+        mPendingIntent = PendingIntent.getActivity(
+        		this, 0, new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
+        
+        IntentFilter ndef = new IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED);
+        mFilters = new IntentFilter[] { ndef, };
+        mTechLists = new String[][] { new String[] { IsoDep.class.getName(), Ndef.class.getName(), NdefFormatable.class.getName() } };
+        
+        // resolve
         resolveIntent(getIntent());
     }
 
@@ -244,9 +257,6 @@ public class TagViewer extends Activity {
     @Override
     public void onSaveInstanceState(Bundle savedInstanceState) {
       super.onSaveInstanceState(savedInstanceState);
-      // Save UI state changes to the savedInstanceState.
-      // This bundle will be passed to onCreate if the process is
-      // killed and restarted.
       savedInstanceState.putInt("number", this.number);
       savedInstanceState.putInt("iter", this.iter);
     }
@@ -254,8 +264,6 @@ public class TagViewer extends Activity {
     @Override
     public void onRestoreInstanceState(Bundle savedInstanceState) {
       super.onRestoreInstanceState(savedInstanceState);
-      // Restore UI state from the savedInstanceState.
-      // This bundle has also been passed to onCreate.
       if (savedInstanceState!=null){
 	      if (savedInstanceState.containsKey("number"))
 	      	this.number = savedInstanceState.getInt("number");
@@ -312,7 +320,37 @@ public class TagViewer extends Activity {
 		}
     }
     
-    public void showSetCodeAlert(){
+	@Override
+    public void onNewIntent(Intent intent) {
+        setIntent(intent);
+        resolveIntent(intent);
+    }
+    
+    @Override
+	protected void onPause() {
+		super.onPause();
+		try {
+			mAdapter.disableForegroundDispatch(this);
+		} catch (Exception ex){
+			Log.e(TAG, "Problem with mAdapter", ex);
+		}
+		
+		Log.i(TAG, "TagViewer paused");
+	}
+
+	@Override
+	protected void onResume() {
+		super.onResume();
+		try {
+			mAdapter.enableForegroundDispatch(this, this.mPendingIntent, this.mFilters, this.mTechLists);
+		} catch (Exception ex){
+			Log.e(TAG, "Problem with mAdapter", ex);
+		}
+		
+		Log.i(TAG, "TagViewer resumed");
+	}
+
+	public void showSetCodeAlert(){
     	AlertDialog.Builder alert = new AlertDialog.Builder(this);
 		alert.setTitle("Code change");
 		alert.setMessage("Enter code:");
@@ -438,12 +476,6 @@ public class TagViewer extends Activity {
 			
 		return false;
 	}
-
-	@Override
-    public void onNewIntent(Intent intent) {
-        setIntent(intent);
-        resolveIntent(intent);
-    }
 
     @Override
     public void setTitle(CharSequence title) {

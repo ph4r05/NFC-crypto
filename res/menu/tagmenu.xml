@@ -1,0 +1,6 @@
+
+    <menu xmlns:android="http://schemas.android.com/apk/res/android">
+        <item android:id="@+id/setMsg" android:title="Set message" android:titleCondensed="setMsg"></item>
+        <item android:id="@+id/delMsg" android:title="Delete messages" android:titleCondensed="delMsgs"></item>
+        <item android:id="@+id/setCode" android:titleCondensed="setCode" android:title="Set Code"></item>
+    </menu>
