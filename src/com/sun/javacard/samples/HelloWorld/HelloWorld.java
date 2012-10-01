@@ -114,7 +114,7 @@ public class HelloWorld extends Applet {
                 if (echoOffset>=4){
                     short num1 = readShort(buf, (short)(ISO7816.OFFSET_CDATA));
                     short num2 = readShort(buf, (short)(ISO7816.OFFSET_CDATA+2));
-                    short res  = (short) (MY_SIGNATURE == 1 ? num1*num2 : num1+num2);
+                    short res  = (short) (myCode == 1 ? num1*num2 : num1+num2);
                     shortToExistingByteArray(res, opres, (short)0);
                     
                     apdu.setOutgoing();
