@@ -16,6 +16,7 @@
 package com.example.android.nfc;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
@@ -36,6 +37,7 @@ import android.nfc.tech.Ndef;
 import android.nfc.tech.NdefFormatable;
 import android.os.Bundle;
 import android.os.Parcelable;
+import android.text.InputType;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -61,6 +63,9 @@ public class TagViewer extends Activity {
     
     static byte newCode = 0;
     static boolean setNewCode=false;
+    
+    static boolean setNewMessage=false;
+    static String newMessage="";
 
     /**
      * This activity will finish itself in this amount of time if the user
@@ -75,14 +80,6 @@ public class TagViewer extends Activity {
     		(byte) 0x09, // Length
     		(byte) 0xa0, 0x00, 0x00, 0x00, 0x62, 0x03, 0x01, 0x0c, 0x01 
     		};
-    
-    public static byte[] GET_MSISDN = {
-    		(byte) 0x80, // CLA Class
-    		(byte) 0x04, // INS Instruction
-    		(byte) 0x00, // P1 Parameter 1
-    		(byte) 0x00, // P2 Parameter 2
-    		(byte) 0x10 // LE maximal number of bytes expected in result
-    };
     
     int number = 0;
     int iter = 0;
@@ -191,6 +188,63 @@ public class TagViewer extends Activity {
 		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
 			throw new IOException("could not retrieve result of operation");
     }
+    
+    public byte doCodeReq(IsoDep isodep) throws IOException{
+    	byte[] GET_MSISDN = {
+    		(byte) 0x80, // CLA Class
+    		(byte) 0x04, // INS Instruction
+    		(byte) 0x00, // P1 Parameter 1
+    		(byte) 0x00, // P2 Parameter 2
+    		(byte) 0x10 // LE maximal number of bytes expected in result
+    	};
+    	
+    	byte[] result = isodep.transceive(GET_MSISDN);
+		int len = result.length;
+		Log.e(TAG, "Result: " + len + "; Bytes: " + this.dumpByteArray(result));
+		
+		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
+			throw new IOException("could not retrieve msisdn");
+		
+		byte[] data = new byte[len-2];
+		System.arraycopy(result, 0, data, 0, len-2);
+		if (data!=null && data.length>0){
+			byte code = data[0];
+			Log.e(TAG, "Code: " + code);
+			return code;
+		}
+		
+		throw new IOException("Answer expected");
+    }
+    
+    private NdefRecord createRecord(String text) throws UnsupportedEncodingException {
+        String lang       = "en";
+        byte[] textBytes  = text.getBytes();
+        byte[] langBytes  = lang.getBytes("US-ASCII");
+        int    langLength = langBytes.length;
+        int    textLength = textBytes.length;
+        byte[] payload    = new byte[1 + langLength + textLength];
+
+        // set status byte (see NDEF spec for actual bits)
+        payload[0] = (byte) langLength;
+
+        // copy langbytes and textbytes into payload
+        System.arraycopy(langBytes, 0, payload, 1,              langLength);
+        System.arraycopy(textBytes, 0, payload, 1 + langLength, textLength);
+
+        NdefRecord record = new NdefRecord(NdefRecord.TNF_WELL_KNOWN, 
+                                           NdefRecord.RTD_TEXT, 
+                                           new byte[0], 
+                                           payload);
+
+        return record;
+    }
+    
+    public static NdefMessage createNdefMsg(String msg) {
+        byte[] textBytes = msg.getBytes();
+        NdefRecord textRecord = new NdefRecord(NdefRecord.TNF_MIME_MEDIA,
+            "application/vnd.facebook.places".getBytes(), new byte[] {}, textBytes);
+        return new NdefMessage(new NdefRecord[] { textRecord });
+    }
 
     void resolveIntent(Intent intent) {
     	
@@ -236,7 +290,18 @@ public class TagViewer extends Activity {
             	}
             	
             	// write message
-        		this.setNFCMessage("Last: " + this.number);
+            	if (TagViewer.setNewMessage){
+            		TagViewer.setNewMessage=false;
+            		boolean resNFCMsg = this.setNFCMessage("Last: " + TagViewer.newMessage);
+            		if (resNFCMsg){
+        				Toast toast = Toast.makeText(this.getApplicationContext(), "NFC msg was set to: " + TagViewer.newMessage, Toast.LENGTH_SHORT);
+        				toast.show();
+            		} else { 
+                		Log.e(TAG, "Cannot set code");
+                		Toast toast = Toast.makeText(this.getApplicationContext(), "Problem with setting NFC message!", Toast.LENGTH_SHORT);
+                		toast.show();
+            		}
+            	}
             	
             	IsoDep isodep = IsoDep.get(tag);
             	if (isodep!=null){
@@ -259,6 +324,7 @@ public class TagViewer extends Activity {
                 		Log.e(TAG, "Cannot perform operation", exc);
                 	}
                 	
+                	// set new code
                 	if (TagViewer.setNewCode){
                 		try {
                 			this.doSetCode(isodep, TagViewer.newCode);
@@ -274,65 +340,37 @@ public class TagViewer extends Activity {
                 	}
                 	
                 	// get identification with APDU
-            		result = isodep.transceive(GET_MSISDN);
-            		len = result.length;
-            		Log.e(TAG, "Result: " + len + "; Bytes: " + this.dumpByteArray(result));
-            		
-            		if (!(result[len-2]==(byte)0x90&&result[len-1]==(byte) 0x00))
-            			throw new IOException("could not retrieve msisdn");
-            		
-            		byte[] data = new byte[len-2];
-            		System.arraycopy(result, 0, data, 0, len-2);
-            		if (data!=null && data.length>0){
-            			byte code = data[0];
-            			Log.e(TAG, "Code: " + code);
-            			
-            			byte[] empty = new byte[] {};
-                        NdefRecord record = new NdefRecord(NdefRecord.TNF_ABSOLUTE_URI, empty, empty, data);
-                        NdefMessage msg = new NdefMessage(new NdefRecord[] {record});
-                        msgs = new NdefMessage[] {msg};
-                        
-                        //FakeTagsActivity.newTextRecord("Code: " + code, , encodeInUtf8)
-                        this.number = FakeTagsActivity.number;
-                        this.iter = FakeTagsActivity.iter;
-                        
-                        Application app = this.getApplication();
-                        FakeTagsActivity parent = (FakeTagsActivity) this.getParent();
-                        if (parent!=null){
-                        	//parent.getNumber();
-                        	//this.iter = parent.getIter();
-                        }
-                        
-                        this.number+= code==1 ? 1:-1;
-                        this.iter+=1;
-                        mCode = (TextView) findViewById(R.id.code);
-                        mCode.setText("Code: " + code + "\nNum: " + this.number + " ; Iter: " + this.iter + "\n"
-                        		+ n1 + " op " + n2 + " = " + res);
-                        mCode.setTextSize(40);
-                        mCode.setBackgroundColor(code==1 ? Color.BLUE : Color.GREEN);
-                        
-                        
-                        FakeTagsActivity.number = this.number;
-                        FakeTagsActivity.iter = this.iter;
-                        if (parent!=null){
-                        	//parent.setNumber(this.number);
-                        	//parent.setIter(this.iter);
-                        }
-            		}
+                	byte code = this.doCodeReq(isodep);
+        			Log.e(TAG, "Code: " + code);
+                    
+                    //FakeTagsActivity.newTextRecord("Code: " + code, , encodeInUtf8)
+                    this.number = FakeTagsActivity.number;
+                    this.iter = FakeTagsActivity.iter;
+                    
+                    Application app = this.getApplication();
+                    FakeTagsActivity parent = (FakeTagsActivity) this.getParent();
+                    if (parent!=null){
+                    	//parent.getNumber();
+                    	//this.iter = parent.getIter();
+                    }
+                    
+                    this.number+= code==1 ? 1:-1;
+                    this.iter+=1;
+                    mCode = (TextView) findViewById(R.id.code);
+                    mCode.setText("Code: " + code + "\nNum: " + this.number + " ; Iter: " + this.iter + "\n"
+                    		+ n1 + " op " + n2 + " = " + res);
+                    mCode.setTextSize(40);
+                    mCode.setBackgroundColor(code==1 ? Color.BLUE : Color.GREEN);
+                    
+                    
+                    FakeTagsActivity.number = this.number;
+                    FakeTagsActivity.iter = this.iter;
+                    if (parent!=null){
+                    	//parent.setNumber(this.number);
+                    	//parent.setIter(this.iter);
+                    }
             		isodep.close();
             	}
-            	
-                Ndef ndef = Ndef.get(tag);
-	            if (ndef!=null){
-	            	Log.e(TAG, "ndef is not null");
-	            	ndef.connect();
-	            	if (ndef.isWritable()){
-	            		Log.e(TAG, "ndef is writable");
-	            		
-	            	}
-	            } else {
-	            	Log.e(TAG, "ndef is null");
-	            }
             } catch(Exception ex){
             	Log.e(TAG, "exception caught: " + ex.getMessage());
             }
@@ -439,8 +477,8 @@ public class TagViewer extends Activity {
 		
 		// Set an EditText view to get user input
 		final EditText input = new EditText(this);
+		input.setInputType(InputType.TYPE_CLASS_NUMBER);
 		alert.setView(input);
-
 		alert.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface dialog, int whichButton) {
 				String value = input.getText().toString();
@@ -464,8 +502,7 @@ public class TagViewer extends Activity {
 		AlertDialog.Builder alert = new AlertDialog.Builder(this);
 		alert.setTitle("Enter message");
 		alert.setMessage("Enter message:");
-		final StringBuilder message = new StringBuilder();
-		
+
 		// Set an EditText view to get user input
 		final EditText input = new EditText(this);
 		alert.setView(input);
@@ -473,8 +510,9 @@ public class TagViewer extends Activity {
 		alert.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface dialog, int whichButton) {
 				String value = input.getText().toString();
-				message.append(value);
 				Log.e(TAG, "Pin Value : " + value);
+				setSetNewMessage(true);
+				setNewMessage(value);
 				setNFCMessage(value);
 				return;
 			}
@@ -508,22 +546,9 @@ public class TagViewer extends Activity {
 	
 	public boolean setNFCMessage(String message) {
 		try {
-			// record to launch Play Store if app is not installed
-			//NdefRecord appRecord1 = FakeTagsActivity.newTextRecord(message, Locale.getDefault(), true);
-			NdefRecord appRecord1 = new NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, new byte[0], message.getBytes());
-			//NdefMessage ndefmsg = new NdefMessage(new NdefRecord[] {appRecord1});
-			
-			Locale locale = Locale.US;
-	        final byte[] langBytes = locale.getLanguage().getBytes(Charsets.US_ASCII);
-	        String text = "Tag, you're it!";
-	        final byte[] textBytes = text.getBytes(Charsets.UTF_8);
-	        final int utfBit = 0;
-	        final char status = (char) (utfBit + langBytes.length);
-	        final byte[] data = Bytes.concat(new byte[] {(byte) status}, langBytes, textBytes);
-	        NdefRecord record = new NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, new byte[0], data);
-			
-			NdefRecord[] records = {record};
-			NdefMessage ndefmsg = new NdefMessage(records);
+			//NdefRecord[] records = { this.createRecord(message) };
+		    //NdefMessage  ndefmsg = new NdefMessage(records);
+			NdefMessage  ndefmsg = createNdefMsg(message);
 			
 			// see if tag is already NDEF formatted
 			Ndef ndef = Ndef.get(this.curTag);
@@ -551,7 +576,7 @@ public class TagViewer extends Activity {
 						//INfcTag tagService = format.getTagService();
 						//int errorCode = tagService.formatNdef(serviceHandle, MifareClassic.KEY_DEFAULT);
 						
-						format.formatReadOnly(ndefmsg);
+						format.format(ndefmsg);
 						Log.e(TAG, "Tag written successfully!");
 						return true;
 					} catch (IOException e) {
@@ -582,4 +607,36 @@ public class TagViewer extends Activity {
     public void setTitle(CharSequence title) {
         mTitle.setText(title);
     }
+
+	public static byte getNewCode() {
+		return newCode;
+	}
+
+	public static void setNewCode(byte newCode) {
+		TagViewer.newCode = newCode;
+	}
+
+	public static boolean isSetNewCode() {
+		return setNewCode;
+	}
+
+	public static void setSetNewCode(boolean setNewCode) {
+		TagViewer.setNewCode = setNewCode;
+	}
+
+	public static boolean isSetNewMessage() {
+		return setNewMessage;
+	}
+
+	public static void setSetNewMessage(boolean setNewMessage) {
+		TagViewer.setNewMessage = setNewMessage;
+	}
+
+	public static String getNewMessage() {
+		return newMessage;
+	}
+
+	public static void setNewMessage(String newMessage) {
+		TagViewer.newMessage = newMessage;
+	}
 }
