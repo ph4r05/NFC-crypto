@@ -92,6 +92,7 @@ public class TagViewer extends Activity {
         setContentView(R.layout.tag_viewer);
         mTagContent = (LinearLayout) findViewById(R.id.list);
         mTitle = (TextView) findViewById(R.id.title);
+        mCode = (TextView) findViewById(R.id.code);
         
         // recover state from bundle
         if (savedInstanceState!=null){
@@ -134,6 +135,12 @@ public class TagViewer extends Activity {
                 msgs = new NdefMessage[rawMsgs.length];
                 for (int i = 0; i < rawMsgs.length; i++) {
                     msgs[i] = (NdefMessage) rawMsgs[i];
+                    
+                    try {
+                    	Log.d(TAG, "MSG: " + msgs[i]);
+                    } catch(Exception e){
+                    	
+                    }
                 }
             } else {
                 // Unknown tag type
@@ -153,15 +160,21 @@ public class TagViewer extends Activity {
             		Log.e(TAG, "Tag is null!");
             	}
             	
+            	StringBuilder sbDump = new StringBuilder();
+            	
             	String[] techs = tag.getTechList();
             	for(int i=0; i<techs.length; i++){
             		Log.e(TAG, "Tech: " + techs[i]);
+            		sbDump.append("Tech: ").append(techs[i]).append("\n");
             	}
+            	
+            	mCode.setText(sbDump.toString());
+                mCode.setBackgroundColor(Color.BLUE);
             	
             	// write message
             	if (TagViewer.setNewMessage){
             		TagViewer.setNewMessage=false;
-            		boolean resNFCMsg = this.setNFCMessage("Last: " + TagViewer.newMessage);
+            		boolean resNFCMsg = this.setNFCMessage(TagViewer.newMessage);
             		if (resNFCMsg){
         				Toast toast = Toast.makeText(this.getApplicationContext(), "NFC msg was set to: " + TagViewer.newMessage, Toast.LENGTH_SHORT);
         				toast.show();
@@ -225,10 +238,10 @@ public class TagViewer extends Activity {
                     
                     this.number+= code==1 ? 1:-1;
                     this.iter+=1;
-                    mCode = (TextView) findViewById(R.id.code);
-                    mCode.setText("Code: " + code + "\nNum: " + this.number + " ; Iter: " + this.iter + "\n"
+                    
+                    mCode.setText(sbDump.toString() + "Code: " + code + "\nNum: " + this.number + " ; Iter: " + this.iter + "\n"
                     		+ n1 + " op " + n2 + " = " + res);
-                    mCode.setTextSize(40);
+                    //mCode.setTextSize(40);
                     mCode.setBackgroundColor(code==1 ? Color.BLUE : Color.GREEN);
                     
                     

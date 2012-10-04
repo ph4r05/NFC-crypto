@@ -175,11 +175,17 @@ public class CardOperations {
      * Creates NDEF message containing one MIME NDEF record with string given
      * @param msg
      * @return
+     * @throws UnsupportedEncodingException 
      */
-    public static NdefMessage createNdefMsg(String msg) {
-        byte[] textBytes = msg.getBytes();
+    public static NdefMessage createNdefMsg(String msg) throws UnsupportedEncodingException {
+    	NdefRecord[] records = { createRecord(msg) };
+        NdefMessage  message = new NdefMessage(records);
+        return message;
+        /*byte[] textBytes = msg.getBytes();
         NdefRecord textRecord = new NdefRecord(NdefRecord.TNF_MIME_MEDIA,
             "application/vnd.facebook.places".getBytes(), new byte[] {}, textBytes);
-        return new NdefMessage(new NdefRecord[] { textRecord });
+        return new NdefMessage(new NdefRecord[] { textRecord });*/
+    	
+    	
     }
 }
