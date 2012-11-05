@@ -1,0 +1,17 @@
+mode_201
+gemXpressoPro
+enable_trace
+establish_context
+card_connect
+select -AID A000000018434D00
+
+open_sc -security 3 -keyind 0 -keyver 0 -key 47454d5850524553534f53414d504c45 
+
+delete -AID a00000006203010c0101
+
+delete -AID a00000006203010c01 
+install -file build/classes/com/sun/javacard/samples/HelloWorld/javacard/HelloWorld.cap -sdAID A000000018434D00 -nvCodeLimit 4000
+select -AID a00000006203010c01
+send_apdu -APDU B040000009010203040506070809
+card_disconnect
+release_context
