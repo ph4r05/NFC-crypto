@@ -1,0 +1,5 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/simulator" android:titleCondensed="Sim" android:visible="true" android:title="Simulator" android:enabled="true"></item>
+    <item android:id="@+id/authenticator" android:titleCondensed="Auth" android:visible="true" android:title="Authentication" android:enabled="true"></item>
+    <item android:id="@+id/useTagView" android:checked="false" android:checkable="true" android:titleCondensed="Tagview" android:visible="true" android:title="Use tagview" android:enabled="true"></item>
+    </menu>
