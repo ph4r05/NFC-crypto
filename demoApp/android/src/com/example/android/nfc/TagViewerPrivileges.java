@@ -189,6 +189,9 @@ public class TagViewerPrivileges extends Activity {
             		if (prevCardCount==1 && this.cardCodes.size()==2){
             			this.stateChanged(2);
             		}
+            	} else {
+            		// attack card - disable AUTH level
+            		this.stateChanged(0);
             	}
             } catch(Exception ex){
             	Log.e(TAG, "exception caught: " + ex.getMessage(), ex);
